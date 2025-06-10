@@ -97,6 +97,7 @@ resource "aws_lambda_function" "processor" {
   environment {
     variables = {
       DDB_TABLE = aws_dynamodb_table.energy_table.name
+      SNS_TOPIC = var.alert_topic_arn
     }
   }
 }
@@ -119,3 +120,9 @@ resource "aws_s3_bucket_notification" "notify" {
   }
   depends_on = [aws_lambda_permission.allow_s3]
 }
+
+resource "aws_iam_role_policy_attachment" "sns_publish" {
+  role       = aws_iam_role.lambda_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonSNSFullAccess"
+}
+
