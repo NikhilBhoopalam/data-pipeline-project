@@ -41,4 +41,9 @@ Lambda logs “pong” event successfully.
 | Anomalies per Site | ![](visualization/anomaly_counts.png) |
 | Net Energy Trend (daily) | ![](visualization/net_energy_trend.png) |
 
+### Day 4 – API Layer
+Goals  
+1. FastAPI service with `/records` & `/anomalies`  
+2. Interactive docs via Swagger UI  
+3. Sample queries & README update  
 
