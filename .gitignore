@@ -1,0 +1,51 @@
+# ───── General OS / Editor clutter ───────────────────────────────
+.DS_Store
+*.swp
+*.swo
+*.sublime-workspace
+.idea/
+.vscode/
+
+# ───── Python artifacts ──────────────────────────────────────────
+# Virtual envs
+venv/
+.env/
+# Byte-code & cache
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+# Distribution archives
+*.egg-info/
+dist/
+build/
+
+# ───── Jupyter / Notebook checkpoints (if any) ───────────────────
+.ipynb_checkpoints/
+
+# ───── Terraform artifacts ───────────────────────────────────────
+.terraform/
+terraform.tfstate
+terraform.tfstate.*
+crash.log
+# Local plan files
+*.tfplan
+*.tfbackup
+
+# ───── Lambda ZIPs & build outputs ───────────────────────────────
+lambda_function.zip
+*.zip
+
+# ───── Data feed & test artefacts ────────────────────────────────
+data_feed/*.json
+test/*.json
+*.csv
+*.parquet
+
+# ───── Logs & debug output ───────────────────────────────────────
+*.log
+
+# ───── MacOS extended attributes ─────────────────────────────────
+.AppleDouble
+.LSOverride
+Icon?
