@@ -1,5 +1,7 @@
-# Core AWS + Data
-boto3>=1.34         # AWS SDK
-pandas>=2.0         # tabular manipulation
-matplotlib>=3.7     # plotting
-
+# Core AWS + D
+boto3>=1.34
+pandas>=2.0
+matplotlib>=3.7
+fastapi>=0.111
+uvicorn[standard]>=0.29
+pydantic>=2.7
