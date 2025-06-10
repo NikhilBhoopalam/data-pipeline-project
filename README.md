@@ -27,4 +27,18 @@ Lambda logs “pong” event successfully.
 
 ```json
 { "site_id": "site-3", "timestamp": "2025-06-10T20:00:00Z", "energy_generated_kwh": -10, "energy_consumed_kwh": 20, "net_energy_kwh": -30, "anomaly": true }
+```
+
+### Day 3 – Alerts & Insights
+1. Add Amazon SNS e-mail alert for anomalies  
+2. Generate three starter charts (energy vs consumption, anomaly count, net-energy trend)  
+
+#### Day 3 – Visualizations
+
+| Chart | Sample |
+|-------|--------|
+| Generation vs Consumption (site-1) | ![](visualization/site1_gen_vs_cons.png) |
+| Anomalies per Site | ![](visualization/anomaly_counts.png) |
+| Net Energy Trend (daily) | ![](visualization/net_energy_trend.png) |
+
 
