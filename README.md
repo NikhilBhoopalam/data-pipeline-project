@@ -20,4 +20,11 @@ This is the data pipeline project
 Lambda logs “pong” event successfully.
 
 ---
+#### Day 2 Verification
+- 17 records in DynamoDB  
+- 3 anomalies detected (`anomaly = true`)  
+- Example anomalous item:
+
+```json
+{ "site_id": "site-3", "timestamp": "2025-06-10T20:00:00Z", "energy_generated_kwh": -10, "energy_consumed_kwh": 20, "net_energy_kwh": -30, "anomaly": true }
 
