@@ -93,7 +93,14 @@ resource "aws_lambda_function" "processor" {
   source_code_hash = data.archive_file.lambda_zip.output_base64sha256
   timeout          = 30
   memory_size      = 128
+
+  environment {
+    variables = {
+      DDB_TABLE = aws_dynamodb_table.energy_table.name
+    }
+  }
 }
+
 
 resource "aws_lambda_permission" "allow_s3" {
   statement_id  = "AllowS3Invoke"
