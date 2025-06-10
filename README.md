@@ -47,3 +47,9 @@ Goals
 2. Interactive docs via Swagger UI  
 3. Sample queries & README update  
 
+### Day 5 – CI/CD & Polish
+1. GitHub Actions workflow (lint + tests + terraform apply)  
+2. Build-status badge  
+3. Teardown / cost-cleanup checklist  
+
+![ci](https://github.com/NikhilBhoopalam/data-pipeline-project/actions/workflows/deploy.yml/badge.svg)
