@@ -20,7 +20,7 @@ jobs:
     - run: pip install black flake8 pytest boto3
 
     # run Black but skip the nested duplicate directory
-    - run: black --check . --exclude 'data-pipeline-project/.*'
+    - run: black --check data-pipeline-project
 
     - run: flake8 .
 
