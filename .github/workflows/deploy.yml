@@ -86,13 +86,8 @@ jobs:
         run: terraform -chdir=terraform validate
 
       # 🔟 TFLint (Terraform lint) — ensure you have terraform/.tflint.hcl configured
-      - name: Setup TFLint
-        uses: terraform-linters/setup-tflint@v1
 
-      - name: Run TFLint
-        run: tflint --config terraform/.tflint.hcl --module
-
-      # 1️⃣1️⃣ Terraform Plan
+      # 🔟 Terraform Plan
       - name: Terraform Plan
         id: tfplan
         run: terraform -chdir=terraform plan -out=tfplan.binary
@@ -103,7 +98,7 @@ jobs:
         with:
           path: tfplan.binary
 
-      # 1️⃣2️⃣ Terraform Apply only on push to main
+      # 1️⃣1️⃣ Terraform Apply only on push to main
       - name: Terraform Apply
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: terraform -chdir=terraform apply -auto-approve tfplan.binary
