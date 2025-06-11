@@ -2,8 +2,15 @@
 name: CI / CD
 
 on:
+  pull_request:
+    branches: [ main ]
   push:
     branches: [ main ]
+
+permissions:
+  # If you later switch to GitHub OIDC for AWS, ensure id-token permission:
+  # id-token: write
+  contents: read
 
 jobs:
   build-deploy:
@@ -14,34 +21,89 @@ jobs:
       AWS_DEFAULT_REGION:    us-east-1
 
     steps:
-      # 1️⃣  Checkout repository
-      - uses: actions/checkout@v4
+      # 1️⃣ Checkout repository
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-      # 2️⃣  Python setup and tests
-      - uses: actions/setup-python@v4
+      # 2️⃣ Setup Python and cache pip
+      - name: Setup Python
+        uses: actions/setup-python@v4
         with:
           python-version: "3.11"
 
-      - run: pip install black flake8 pytest boto3
+      - name: Cache pip
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
 
-      # Lint temporarily disabled to unblock pipeline
-      - run: echo "Skipping Black & flake8 lint step for now"
-
-      - name: Run tests
+      - name: Install Python dependencies
         run: |
-          pytest -q || echo "pytest: no tests found"
+          pip install --upgrade pip
+          pip install black flake8 pytest pytest-cov moto fastapi[all] boto3
 
-      # 3️⃣  Terraform
-      - uses: hashicorp/setup-terraform@v2
+      # 3️⃣ Lint: Black & Flake8
+      - name: Black check
+        run: black --check .
 
+      - name: Flake8 lint
+        run: flake8 .
+
+      # 4️⃣ Run tests with coverage
+      - name: Run pytest with coverage
+        run: pytest --cov=.
+
+      # 6️⃣ Setup Terraform plugin cache
+      - name: Cache Terraform plugins
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.terraform.d/plugin-cache
+          key: ${{ runner.os }}-terraform-${{ hashFiles('terraform/**/*.tf*') }}
+
+      - name: Setup Terraform CLI plugin cache directory
+        run: |
+          mkdir -p ~/.terraform.d
+          cat <<EOF > ~/.terraform.d/cli.hcl
+          plugin_cache_dir = "$HOME/.terraform.d/plugin-cache"
+          EOF
+
+      # 7️⃣ Setup Terraform
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: "1.5.0"
+
+      # 8️⃣ Terraform Init (with backend)
       - name: Terraform Init
-        run: terraform -chdir=terraform init
+        run: terraform -chdir=terraform init -reconfigure
 
+      # 9️⃣ Terraform Fmt Check and Validate
       - name: Terraform Fmt Check
         run: terraform -chdir=terraform fmt -check
 
       - name: Terraform Validate
         run: terraform -chdir=terraform validate
 
+      # 🔟 TFLint (Terraform lint) — ensure you have terraform/.tflint.hcl configured
+      - name: Setup TFLint
+        uses: terraform-linters/setup-tflint@v1
+
+      - name: Run TFLint
+        run: tflint --config terraform/.tflint.hcl --module
+
+      # 1️⃣1️⃣ Terraform Plan
+      - name: Terraform Plan
+        id: tfplan
+        run: terraform -chdir=terraform plan -out=tfplan.binary
+
+      - name: Comment Terraform Plan on PR
+        if: github.event_name == 'pull_request'
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          path: tfplan.binary
+
+      # 1️⃣2️⃣ Terraform Apply only on push to main
       - name: Terraform Apply
-        run: terraform -chdir=terraform apply -auto-approve
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: terraform -chdir=terraform apply -auto-approve tfplan.binary
