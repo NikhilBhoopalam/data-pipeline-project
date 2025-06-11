@@ -32,11 +32,7 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser(
         description="Simulate energy feed by uploading JSON to S3."
     )
-    ap.add_argument(
-        "--bucket",
-        required=True,
-        help="S3 bucket name to upload to"
-    )
+    ap.add_argument("--bucket", required=True, help="S3 bucket name to upload to")
     ap.add_argument(
         "--interval",
         type=int,

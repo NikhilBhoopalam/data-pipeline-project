@@ -44,9 +44,7 @@ def lambda_handler(event, context):
             }
             TABLE.put_item(Item=item)
 
-            print(
-                f"✅ wrote {row['site_id']} {row['timestamp']} anomaly={anomaly}"
-            )
+            print(f"✅ wrote {row['site_id']} {row['timestamp']} anomaly={anomaly}")
 
             if anomaly and TOPIC:
                 # Build subject and message
