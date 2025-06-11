@@ -1,7 +1,13 @@
-import boto3, json, time, random, datetime, argparse
+import argparse
+import boto3
+import json
+import random
+import time
+import datetime
 
 
 def make_record(site):
+    """Generate a single energy record with possible negative values."""
     return {
         "site_id": site,
         "timestamp": datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -23,8 +29,19 @@ def main(bucket, interval):
 
 
 if __name__ == "__main__":
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--bucket", required=True)
-    ap.add_argument("--interval", type=int, default=300)
+    ap = argparse.ArgumentParser(
+        description="Simulate energy feed by uploading JSON to S3."
+    )
+    ap.add_argument(
+        "--bucket",
+        required=True,
+        help="S3 bucket name to upload to"
+    )
+    ap.add_argument(
+        "--interval",
+        type=int,
+        default=300,
+        help="Interval between uploads in seconds (default: 300)",
+    )
     args = ap.parse_args()
     main(args.bucket, args.interval)

@@ -1,0 +1,11 @@
+[tool.black]
+line-length = 88
+target-version = ['py311']
+exclude = '''
+(
+  /terraform/
+  | \.venv/
+  | lambda.zip
+  | /visualization/.*\.png  # if you store generated charts
+)
+'''
