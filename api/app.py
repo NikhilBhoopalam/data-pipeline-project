@@ -6,14 +6,15 @@ from boto3.dynamodb.conditions import Key, Attr
 from decimal import Decimal
 import os
 
-TABLE_NAME = os.getenv("DDB_TABLE", "EnergyData")   # same table as Lambda
-table = boto3.resource("dynamodb").Table(TABLE_NAME) # type: ignore
+TABLE_NAME = os.getenv("DDB_TABLE", "EnergyData")  # same table as Lambda
+table = boto3.resource("dynamodb").Table(TABLE_NAME)  # type: ignore
 
 app = FastAPI(
     title="Energy Data API",
     description="Query processed energy records stored in DynamoDB",
     version="1.0",
 )
+
 
 class EnergyRecord(BaseModel):
     site_id: str
@@ -23,6 +24,7 @@ class EnergyRecord(BaseModel):
     net_energy_kwh: float
     anomaly: bool
 
+
 def _convert(item: dict) -> dict:
     """Convert Decimals → float/bool for JSON."""
     for k, v in item.items():
@@ -30,11 +32,12 @@ def _convert(item: dict) -> dict:
             item[k] = float(v)
     return item
 
+
 @app.get("/records", response_model=List[EnergyRecord])
 def get_records(
     site_id: str = Query(..., description="Site identifier"),
     start: Optional[str] = Query(None, description="Start ISO timestamp"),
-    end:   Optional[str] = Query(None, description="End ISO timestamp"),
+    end: Optional[str] = Query(None, description="End ISO timestamp"),
 ):
     """
     Fetch records for a given site, optionally filtered by [start, end] timestamp.
@@ -42,8 +45,8 @@ def get_records(
     try:
         if start and end:
             resp = table.query(
-                KeyConditionExpression=Key("site_id").eq(site_id) &
-                                      Key("timestamp").between(start, end)
+                KeyConditionExpression=Key("site_id").eq(site_id)
+                & Key("timestamp").between(start, end)
             )
         else:
             resp = table.query(KeyConditionExpression=Key("site_id").eq(site_id))
@@ -51,6 +54,7 @@ def get_records(
         raise HTTPException(status_code=500, detail=str(e))
 
     return [_convert(it) for it in resp.get("Items", [])]
+
 
 @app.get("/anomalies", response_model=List[EnergyRecord])
 def get_anomalies(site_id: str = Query(..., description="Site identifier")):

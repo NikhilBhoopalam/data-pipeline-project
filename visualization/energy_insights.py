@@ -6,7 +6,7 @@ from pathlib import Path
 
 # ---------- Load data from DynamoDB ----------
 table = boto3.resource("dynamodb").Table("EnergyData")
-rows  = table.scan()["Items"]
+rows = table.scan()["Items"]
 
 # Convert Decimal → float
 for r in rows:
@@ -22,7 +22,7 @@ Path("visualization").mkdir(exist_ok=True)
 
 # 1. ─── Generation vs Consumption (site-1) ───────────────────────
 site = "site-1"
-sub  = df[df["site_id"] == site].sort_values("timestamp")
+sub = df[df["site_id"] == site].sort_values("timestamp")
 
 plt.figure(figsize=(9, 4))
 plt.plot(sub["timestamp"], sub["energy_generated_kwh"], label="generated")
@@ -49,9 +49,9 @@ plt.close()
 
 # 3. ─── Net-energy daily trend (all sites) ──────────────────────
 daily = (
-    df.set_index("timestamp")          # make timestamp the index
-      .resample("D")["net_energy_kwh"] # daily sum
-      .sum()
+    df.set_index("timestamp")  # make timestamp the index
+    .resample("D")["net_energy_kwh"]  # daily sum
+    .sum()
 )
 
 plt.figure(figsize=(9, 4))

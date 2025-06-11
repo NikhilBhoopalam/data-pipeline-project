@@ -1,5 +1,6 @@
 import boto3, json, time, random, datetime, argparse
 
+
 def make_record(site):
     return {
         "site_id": site,
@@ -7,6 +8,7 @@ def make_record(site):
         "energy_generated_kwh": round(random.uniform(-5, 100), 2),
         "energy_consumed_kwh": round(random.uniform(-5, 100), 2),
     }
+
 
 def main(bucket, interval):
     s3 = boto3.client("s3")
@@ -18,6 +20,7 @@ def main(bucket, interval):
         s3.put_object(Bucket=bucket, Key=key, Body=json.dumps(rec))
         print("⬆️  uploaded", key)
         time.sleep(interval)
+
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
