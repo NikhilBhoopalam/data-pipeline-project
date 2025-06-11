@@ -18,7 +18,10 @@ jobs:
         python-version: "3.11"
 
     - run: pip install black flake8 pytest boto3
-    - run: black --check .
+
+    # run Black but skip the nested duplicate directory
+    - run: black --check . --exclude 'data-pipeline-project/.*'
+
     - run: flake8 .
 
     - name: Run tests
