@@ -146,16 +146,34 @@ jobs:
         run: terraform apply -auto-approve tfplan.binary
 
       # 1️⃣4️⃣ Smoke test API endpoint (only after Apply on main)
-      - name: Smoke test API endpoint
+      - name: Smoke test API endpoint (verbose)
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         working-directory: terraform
         env:
           AWS_REGION: us-east-1
         run: |
+          set -euxo pipefail
+          # 1. Retrieve the endpoint
           ENDPOINT=$(terraform output -raw api_endpoint)
-          echo "Calling API: ${ENDPOINT}/records?site_id=test-site"
-          STATUS=$(curl -o /dev/null -s -w "%{http_code}" "${ENDPOINT}/records?site_id=test-site")
-          if [ "$STATUS" != "200" ]; then
-            echo "Smoke test failed: HTTP $STATUS"; exit 1;
+          echo "Terraform output api_endpoint: $ENDPOINT"
+          # 2. Check that it's non-empty
+          if [ -z "$ENDPOINT" ]; then
+            echo "ERROR: api_endpoint output is empty"; exit 1;
           fi
+          # 3. Build test URL
+          URL="${ENDPOINT%/}/records?site_id=test-site"
+          echo "Calling URL: $URL"
+          # 4. Perform request, capture status and body
+          HTTP_STATUS=$(curl -s -o response_body.txt -w "%{http_code}" "$URL")
+          echo "HTTP status: $HTTP_STATUS"
+          echo "Response body:"
+          cat response_body.txt || true
+          if [ "$HTTP_STATUS" != "200" ]; then
+            echo "Smoke test failed: expected 200 but got $HTTP_STATUS"; exit 1;
+          fi
+          # Optionally: assert valid JSON array:
+          if ! jq empty response_body.txt; then
+            echo "Response is not valid JSON"; exit 1;
+          fi
+
 
