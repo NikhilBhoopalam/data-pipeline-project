@@ -139,6 +139,22 @@ jobs:
         with:
           path: terraform/tfplan.binary
 
+      - name: Build API Lambda package
+        run: |
+          python -m venv .venv_pack
+          source .venv_pack/bin/activate
+          pip install --upgrade pip
+          # Install only runtime dependencies (fastapi, mangum, pydantic)
+          rm -rf api_lambda_build
+          mkdir -p api_lambda_build/python
+          pip install --target api_lambda_build/python fastapi mangum pydantic
+          # Copy code
+          cp -r api api_lambda_build/
+          # Zip into terraform folder
+          cd api_lambda_build && zip -r ../terraform/api_lambda.zip .
+          cd ..
+        
+
       # 1️⃣3️⃣ Terraform Apply only on push to main
       - name: Terraform Apply
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
