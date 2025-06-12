@@ -1,19 +1,31 @@
+# api/app.py
+
 from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel
-from typing import List, Optional
 import boto3
-from boto3.dynamodb.conditions import Key
-from decimal import Decimal
+from boto3.dynamodb.conditions import Key, Attr
 import os
+from fastapi.middleware.cors import CORSMiddleware
+from mangum import Mangum
 
-TABLE_NAME = os.getenv("DDB_TABLE", "EnergyData")  # same table as Lambda
-table = boto3.resource("dynamodb").Table(TABLE_NAME)  # type: ignore
-
+# FastAPI app with metadata
 app = FastAPI(
     title="Energy Data API",
     description="Query processed energy records stored in DynamoDB",
     version="1.0",
 )
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # or specific domains
+    allow_methods=["GET", "OPTIONS"],
+    allow_headers=["*"],
+)
+
+
+# DynamoDB table reference
+TABLE_NAME = os.getenv("DDB_TABLE", "EnergyData")
+TABLE = boto3.resource("dynamodb").Table(TABLE_NAME)  # type: ignore
 
 
 class EnergyRecord(BaseModel):
@@ -25,46 +37,94 @@ class EnergyRecord(BaseModel):
     anomaly: bool
 
 
-def _convert(item: dict) -> dict:
-    """Convert Decimals → float/bool for JSON."""
-    for k, v in item.items():
-        if isinstance(v, Decimal):
-            item[k] = float(v)
-    return item
-
-
-@app.get("/records", response_model=List[EnergyRecord])
+@app.get("/records", response_model=list[EnergyRecord])
 def get_records(
     site_id: str = Query(..., description="Site identifier"),
-    start: Optional[str] = Query(None, description="Start ISO timestamp"),
-    end: Optional[str] = Query(None, description="End ISO timestamp"),
+    start: str | None = Query(None, description="Start ISO timestamp"),
+    end: str | None = Query(None, description="End ISO timestamp"),
 ):
     """
     Fetch records for a given site, optionally filtered by [start, end] timestamp.
     """
+    # Build KeyConditionExpression for site_id and timestamp range if provided
+    expr = Key("site_id").eq(site_id)
+    if start and end:
+        expr = expr & Key("timestamp").between(start, end)
+    elif start:
+        expr = expr & Key("timestamp").gte(start)
+    elif end:
+        expr = expr & Key("timestamp").lte(end)
+
     try:
-        if start and end:
-            resp = table.query(
-                KeyConditionExpression=Key("site_id").eq(site_id)
-                & Key("timestamp").between(start, end)
+        resp = TABLE.query(KeyConditionExpression=expr)
+    except Exception as e:
+        # Log error if desired
+        raise HTTPException(status_code=500, detail=f"DynamoDB query error: {e}")
+
+    items = resp.get("Items", [])
+    results: list[EnergyRecord] = []
+    for it in items:
+        # Convert Decimal to float/bool explicitly
+        try:
+            rec = EnergyRecord(
+                site_id=it["site_id"],
+                timestamp=it["timestamp"],
+                energy_generated_kwh=float(it["energy_generated_kwh"]),
+                energy_consumed_kwh=float(it["energy_consumed_kwh"]),
+                net_energy_kwh=float(it["net_energy_kwh"]),
+                anomaly=bool(it["anomaly"]),
             )
-        else:
-            resp = table.query(KeyConditionExpression=Key("site_id").eq(site_id))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        except Exception as e:
+            # If conversion fails, skip or raise
+            raise HTTPException(status_code=500, detail=f"Data conversion error: {e}")
+        results.append(rec)
+    return results
 
-    return [_convert(it) for it in resp.get("Items", [])]
 
-
-@app.get("/anomalies", response_model=List[EnergyRecord])
-def get_anomalies(site_id: str = Query(..., description="Site identifier")):
+@app.get("/anomalies", response_model=list[EnergyRecord])
+def get_anomalies(
+    site_id: str = Query(..., description="Site identifier"),
+    start: str | None = Query(None, description="Start ISO timestamp"),
+    end: str | None = Query(None, description="End ISO timestamp"),
+):
     """
-    Return only anomaly=True records for a given site.
+    Return only anomaly=True records for a given site, optionally
+    filtered by timestamp range.
     """
+    # Build KeyConditionExpression as above
+    expr = Key("site_id").eq(site_id)
+    if start and end:
+        expr = expr & Key("timestamp").between(start, end)
+    elif start:
+        expr = expr & Key("timestamp").gte(start)
+    elif end:
+        expr = expr & Key("timestamp").lte(end)
+
+    # FilterExpression for anomaly attribute
+    filter_expr = Attr("anomaly").eq(True)
+
     try:
-        resp = table.query(KeyConditionExpression=Key("site_id").eq(site_id))
+        resp = TABLE.query(KeyConditionExpression=expr, FilterExpression=filter_expr)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"DynamoDB query error: {e}")
 
-    anomalies = [it for it in resp.get("Items", []) if it.get("anomaly")]
-    return [_convert(it) for it in anomalies]
+    items = resp.get("Items", [])
+    results: list[EnergyRecord] = []
+    for it in items:
+        try:
+            rec = EnergyRecord(
+                site_id=it["site_id"],
+                timestamp=it["timestamp"],
+                energy_generated_kwh=float(it["energy_generated_kwh"]),
+                energy_consumed_kwh=float(it["energy_consumed_kwh"]),
+                net_energy_kwh=float(it["net_energy_kwh"]),
+                anomaly=bool(it["anomaly"]),
+            )
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Data conversion error: {e}")
+        results.append(rec)
+    return results
+
+
+# If deploying to AWS Lambda + API Gateway, wrap with Mangum
+handler = Mangum(app)

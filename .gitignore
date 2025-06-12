@@ -6,6 +6,11 @@
 .idea/
 .vscode/
 
+# Build artifacts and packaging
+api_lambda_build/
+terraform/api_lambda.zip
+api_lambda.zip
+
 # ───── Python artifacts ──────────────────────────────────────────
 # Virtual envs
 venv/
@@ -49,3 +54,7 @@ test/*.json
 .AppleDouble
 .LSOverride
 Icon?
+
+# Terraform state and plan files (if accidentally generated locally)
+terraform/terraform.tfstate*
+terraform/*.tfplan*
