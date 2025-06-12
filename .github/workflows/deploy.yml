@@ -148,27 +148,60 @@ jobs:
         run: terraform apply -auto-approve tfplan.binary
 
       # 1️⃣4️⃣ Smoke test API endpoint (only after Apply on main)
-      - name: Smoke test API endpoint
+      - name: Smoke test API endpoint (verbose)
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         working-directory: terraform
         env:
           AWS_REGION: us-east-1
         run: |
-          set -euxo pipefail
+          # Use bash but disable xtrace around the capture so trace lines don't pollute the capture.
+          set -euo pipefail
+          # Temporarily turn off xtrace to avoid capturing traced commands:
+          set +x
           ENDPOINT=$(terraform output -raw api_endpoint)
+          # Re-enable xtrace if you still want further logging of commands:
+          set -x
           echo "Terraform output api_endpoint: $ENDPOINT"
           if [ -z "$ENDPOINT" ]; then
             echo "ERROR: api_endpoint output is empty"; exit 1;
           fi
+          # Build test URL
           URL="${ENDPOINT%/}/records?site_id=test-site"
           echo "Calling URL: $URL"
+          # Perform request, capture status and body
+          # We redirect output to a file so we can inspect body on failure
           HTTP_STATUS=$(curl -s -o response_body.txt -w "%{http_code}" "$URL")
           echo "HTTP status: $HTTP_STATUS"
+          echo "Response body:"
           cat response_body.txt || true
           if [ "$HTTP_STATUS" != "200" ]; then
             echo "Smoke test failed: expected 200 but got $HTTP_STATUS"; exit 1;
           fi
-          # Optionally verify valid JSON
+          # Optionally verify valid JSON:
           if ! jq empty response_body.txt; then
             echo "Response is not valid JSON"; exit 1;
           fi
+
+          if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+          working-directory: terraform
+          env:
+            AWS_REGION: us-east-1
+          run: |
+            set -euxo pipefail
+            ENDPOINT=$(terraform output -raw api_endpoint)
+            echo "Terraform output api_endpoint: $ENDPOINT"
+            if [ -z "$ENDPOINT" ]; then
+              echo "ERROR: api_endpoint output is empty"; exit 1;
+            fi
+            URL="${ENDPOINT%/}/records?site_id=test-site"
+            echo "Calling URL: $URL"
+            HTTP_STATUS=$(curl -s -o response_body.txt -w "%{http_code}" "$URL")
+            echo "HTTP status: $HTTP_STATUS"
+            cat response_body.txt || true
+            if [ "$HTTP_STATUS" != "200" ]; then
+              echo "Smoke test failed: expected 200 but got $HTTP_STATUS"; exit 1;
+            fi
+            # Optionally verify valid JSON
+            if ! jq empty response_body.txt; then
+              echo "Response is not valid JSON"; exit 1;
+            fi
