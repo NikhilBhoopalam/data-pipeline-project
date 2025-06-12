@@ -9,14 +9,12 @@ on:
 
 permissions:
   contents: read
-  id-token: write   # if you plan to migrate to GitHub OIDC in future
+  id-token: write   # for possible future OIDC use
 
 jobs:
   build-deploy:
     runs-on: ubuntu-latest
 
-    # Note: we’ll configure AWS credentials via aws-actions/configure-aws-credentials,
-    # rather than embedding AWS_ACCESS_KEY_ID in env at job-level.
     steps:
       # 1️⃣ Checkout code
       - name: Checkout repository
@@ -32,30 +30,41 @@ jobs:
         uses: actions/cache@v3
         with:
           path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements*.txt') }}
 
-      - name: Install Python dependencies
+      - name: Install Python dev/test dependencies
         run: |
+          python -m venv .venv
+          source .venv/bin/activate
           pip install --upgrade pip
-          # Install dev/test dependencies for linting and unit tests
+          # It’s better to separate runtime vs dev dependencies:
+          # e.g. requirements.txt for runtime (fastapi, mangum, pydantic), 
+          # requirements-dev.txt for lint/test (pytest, moto, black, flake8, etc.)
+          # Here install dev deps for lint/tests:
           pip install black flake8 pytest pytest-cov moto fastapi[all] mangum boto3 pydantic
 
-      # 3️⃣ Lint: Black & Flake8 (only on source folders)
+      # 3️⃣ Lint: Black & Flake8 on source folders
       - name: Black check
         run: |
-          # Exclude build dirs; adjust paths if needed
+          source .venv/bin/activate
           black --check lambda_function api data_feed tests || \
             (echo "Black formatting issues in source folders. Run 'black lambda_function api data_feed tests' locally."; exit 1)
 
       - name: Flake8 lint
         run: |
-          # Lint only source folders
+          source .venv/bin/activate
           flake8 lambda_function api || \
             (echo "Flake8 issues in source folders."; exit 1)
 
-      # 4️⃣ Run tests with coverage
+      # 4️⃣ Run unit tests (with moto mocking DynamoDB/S3)
+      - name: Run pytest
+        env:
+          AWS_REGION: us-east-1
+        run: |
+          source .venv/bin/activate
+          pytest --cov=. -q
 
-      # 5️⃣ Configure AWS credentials for Terraform & smoke tests
+      # 5️⃣ Configure AWS credentials (for Terraform & smoke tests)
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v2
         with:
@@ -63,24 +72,24 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: us-east-1
 
-      # 6️⃣ Build API Lambda package
+      # 6️⃣ Build API Lambda package **before** Terraform plan
       - name: Build API Lambda package
         run: |
-          # Create a temporary venv for packaging
           python -m venv .venv_pack
           source .venv_pack/bin/activate
           pip install --upgrade pip
-          # Install only runtime dependencies for API Lambda
+          # Install only runtime dependencies for API Lambda (keep minimal to avoid large ZIP):
+          # If you have a separate runtime requirements file, use it. Otherwise:
+          pip install --target api_lambda_build/python fastapi mangum pydantic
+          # Copy API code
           rm -rf api_lambda_build
           mkdir -p api_lambda_build/python
-          # Install dependencies into the build dir
-          pip install --target api_lambda_build/python -r requirements.txt
-          # Copy API code
+          # Note: if your code imports other modules, ensure they are in api/ or installed above.
           cp -r api api_lambda_build/
-          # Zip contents into Terraform folder
+          # Zip into terraform folder so Terraform can pick it up:
           cd api_lambda_build && zip -r ../terraform/api_lambda.zip .
           cd ..
-        # Add api_lambda_build/ and terraform/api_lambda.zip to .gitignore so they won't be committed
+        # Make sure api_lambda_build/ and terraform/api_lambda.zip are in .gitignore
 
       # 7️⃣ Cache Terraform plugins
       - name: Cache Terraform plugins
@@ -117,20 +126,13 @@ jobs:
         working-directory: terraform
         run: terraform validate
 
-      # Optional: TFLint step if you have .tflint.hcl configured in terraform/
-      # - name: TFLint Init & Run
-      #   working-directory: terraform
-      #   run: |
-      #     tflint --init
-      #     tflint --recursive
-
-      # 1️⃣1️⃣ Terraform Plan
+      # 1️⃣1️⃣ Terraform Plan (now sees correct api_lambda.zip)
       - name: Terraform Plan
         id: tfplan
         working-directory: terraform
         run: |
           terraform plan -out=tfplan.binary \
-            -var="alert_topic_arn=${{ secrets.TF_VAR_alert_TOPIC_ARN }}"  # ensure this secret exists
+            -var="alert_topic_arn=${{ secrets.TF_VAR_alert_TOPIC_ARN }}"
 
       # 1️⃣2️⃣ Comment Terraform Plan on PR
       - name: Comment Terraform Plan on PR
@@ -139,22 +141,6 @@ jobs:
         with:
           path: terraform/tfplan.binary
 
-      - name: Build API Lambda package
-        run: |
-          python -m venv .venv_pack
-          source .venv_pack/bin/activate
-          pip install --upgrade pip
-          # Install only runtime dependencies (fastapi, mangum, pydantic)
-          rm -rf api_lambda_build
-          mkdir -p api_lambda_build/python
-          pip install --target api_lambda_build/python fastapi mangum pydantic
-          # Copy code
-          cp -r api api_lambda_build/
-          # Zip into terraform folder
-          cd api_lambda_build && zip -r ../terraform/api_lambda.zip .
-          cd ..
-        
-
       # 1️⃣3️⃣ Terraform Apply only on push to main
       - name: Terraform Apply
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -162,34 +148,27 @@ jobs:
         run: terraform apply -auto-approve tfplan.binary
 
       # 1️⃣4️⃣ Smoke test API endpoint (only after Apply on main)
-      - name: Smoke test API endpoint (verbose)
+      - name: Smoke test API endpoint
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         working-directory: terraform
         env:
           AWS_REGION: us-east-1
         run: |
           set -euxo pipefail
-          # 1. Retrieve the endpoint
           ENDPOINT=$(terraform output -raw api_endpoint)
           echo "Terraform output api_endpoint: $ENDPOINT"
-          # 2. Check that it's non-empty
           if [ -z "$ENDPOINT" ]; then
             echo "ERROR: api_endpoint output is empty"; exit 1;
           fi
-          # 3. Build test URL
           URL="${ENDPOINT%/}/records?site_id=test-site"
           echo "Calling URL: $URL"
-          # 4. Perform request, capture status and body
           HTTP_STATUS=$(curl -s -o response_body.txt -w "%{http_code}" "$URL")
           echo "HTTP status: $HTTP_STATUS"
-          echo "Response body:"
           cat response_body.txt || true
           if [ "$HTTP_STATUS" != "200" ]; then
             echo "Smoke test failed: expected 200 but got $HTTP_STATUS"; exit 1;
           fi
-          # Optionally: assert valid JSON array:
+          # Optionally verify valid JSON
           if ! jq empty response_body.txt; then
             echo "Response is not valid JSON"; exit 1;
           fi
-
-
