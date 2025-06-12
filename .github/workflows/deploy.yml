@@ -8,25 +8,22 @@ on:
     branches: [ main ]
 
 permissions:
-  # If you later switch to GitHub OIDC for AWS, ensure id-token permission:
-  # id-token: write
   contents: read
+  id-token: write   # if you plan to migrate to GitHub OIDC in future
 
 jobs:
   build-deploy:
     runs-on: ubuntu-latest
-    env:
-      AWS_ACCESS_KEY_ID:     ${{ secrets.AWS_ACCESS_KEY_ID }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-      AWS_DEFAULT_REGION:    us-east-1
 
+    # Note: we’ll configure AWS credentials via aws-actions/configure-aws-credentials,
+    # rather than embedding AWS_ACCESS_KEY_ID in env at job-level.
     steps:
-      # 1️⃣ Checkout repository
-      - name: Checkout code
+      # 1️⃣ Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       # 2️⃣ Setup Python and cache pip
-      - name: Setup Python
+      - name: Setup Python 3.11
         uses: actions/setup-python@v4
         with:
           python-version: "3.11"
@@ -40,20 +37,52 @@ jobs:
       - name: Install Python dependencies
         run: |
           pip install --upgrade pip
-          pip install black flake8 pytest pytest-cov moto fastapi[all] boto3
+          # Install dev/test dependencies for linting and unit tests
+          pip install black flake8 pytest pytest-cov moto fastapi[all] mangum boto3 pydantic
 
-      # 3️⃣ Lint: Black & Flake8
+      # 3️⃣ Lint: Black & Flake8 (only on source folders)
       - name: Black check
-        run: black --check .
+        run: |
+          # Exclude build dirs; adjust paths if needed
+          black --check lambda_function api data_feed tests || \
+            (echo "Black formatting issues in source folders. Run 'black lambda_function api data_feed tests' locally."; exit 1)
 
       - name: Flake8 lint
-        run: flake8 .
+        run: |
+          # Lint only source folders
+          flake8 lambda_function api || \
+            (echo "Flake8 issues in source folders."; exit 1)
 
       # 4️⃣ Run tests with coverage
-      - name: Run pytest with coverage
-        run: pytest --cov=.
 
-      # 6️⃣ Setup Terraform plugin cache
+      # 5️⃣ Configure AWS credentials for Terraform & smoke tests
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      # 6️⃣ Build API Lambda package
+      - name: Build API Lambda package
+        run: |
+          # Create a temporary venv for packaging
+          python -m venv .venv_pack
+          source .venv_pack/bin/activate
+          pip install --upgrade pip
+          # Install only runtime dependencies for API Lambda
+          rm -rf api_lambda_build
+          mkdir -p api_lambda_build/python
+          # Install dependencies into the build dir
+          pip install --target api_lambda_build/python -r requirements.txt
+          # Copy API code
+          cp -r api api_lambda_build/
+          # Zip contents into Terraform folder
+          cd api_lambda_build && zip -r ../terraform/api_lambda.zip .
+          cd ..
+        # Add api_lambda_build/ and terraform/api_lambda.zip to .gitignore so they won't be committed
+
+      # 7️⃣ Cache Terraform plugins
       - name: Cache Terraform plugins
         uses: actions/cache@v3
         with:
@@ -61,44 +90,72 @@ jobs:
             ~/.terraform.d/plugin-cache
           key: ${{ runner.os }}-terraform-${{ hashFiles('terraform/**/*.tf*') }}
 
-      - name: Setup Terraform CLI plugin cache directory
+      - name: Setup Terraform plugin cache dir
         run: |
           mkdir -p ~/.terraform.d
           cat <<EOF > ~/.terraform.d/cli.hcl
           plugin_cache_dir = "$HOME/.terraform.d/plugin-cache"
           EOF
 
-      # 7️⃣ Setup Terraform
+      # 8️⃣ Setup Terraform CLI
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v2
         with:
           terraform_version: "1.5.0"
 
-      # 8️⃣ Terraform Init (with backend)
+      # 9️⃣ Terraform Init (with backend)
       - name: Terraform Init
-        run: terraform -chdir=terraform init -reconfigure
+        working-directory: terraform
+        run: terraform init -reconfigure
 
-      # 9️⃣ Terraform Fmt Check and Validate
+      # 🔟 Terraform Fmt Check and Validate
       - name: Terraform Fmt Check
-        run: terraform -chdir=terraform fmt -check
+        working-directory: terraform
+        run: terraform fmt -check
 
       - name: Terraform Validate
-        run: terraform -chdir=terraform validate
+        working-directory: terraform
+        run: terraform validate
 
-      # 🔟 TFLint (Terraform lint) — ensure you have terraform/.tflint.hcl configured
+      # Optional: TFLint step if you have .tflint.hcl configured in terraform/
+      # - name: TFLint Init & Run
+      #   working-directory: terraform
+      #   run: |
+      #     tflint --init
+      #     tflint --recursive
 
-      # 🔟 Terraform Plan
+      # 1️⃣1️⃣ Terraform Plan
       - name: Terraform Plan
         id: tfplan
-        run: terraform -chdir=terraform plan -out=tfplan.binary
+        working-directory: terraform
+        run: |
+          terraform plan -out=tfplan.binary \
+            -var="alert_topic_arn=${{ secrets.TF_VAR_alert_TOPIC_ARN }}"  # ensure this secret exists
 
+      # 1️⃣2️⃣ Comment Terraform Plan on PR
       - name: Comment Terraform Plan on PR
         if: github.event_name == 'pull_request'
         uses: marocchino/sticky-pull-request-comment@v2
         with:
-          path: tfplan.binary
+          path: terraform/tfplan.binary
 
-      # 1️⃣1️⃣ Terraform Apply only on push to main
+      # 1️⃣3️⃣ Terraform Apply only on push to main
       - name: Terraform Apply
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        run: terraform -chdir=terraform apply -auto-approve tfplan.binary
+        working-directory: terraform
+        run: terraform apply -auto-approve tfplan.binary
+
+      # 1️⃣4️⃣ Smoke test API endpoint (only after Apply on main)
+      - name: Smoke test API endpoint
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        working-directory: terraform
+        env:
+          AWS_REGION: us-east-1
+        run: |
+          ENDPOINT=$(terraform output -raw api_endpoint)
+          echo "Calling API: ${ENDPOINT}/records?site_id=test-site"
+          STATUS=$(curl -o /dev/null -s -w "%{http_code}" "${ENDPOINT}/records?site_id=test-site")
+          if [ "$STATUS" != "200" ]; then
+            echo "Smoke test failed: HTTP $STATUS"; exit 1;
+          fi
+

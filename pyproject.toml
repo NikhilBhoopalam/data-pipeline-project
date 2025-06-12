@@ -3,9 +3,11 @@ line-length = 88
 target-version = ['py311']
 exclude = '''
 (
-  /terraform/
+    /terraform/
   | \.venv/
-  | lambda.zip
-  | /visualization/.*\.png  # if you store generated charts
+  | api_lambda_build/
+  | terraform/api_lambda\.zip
+  | lambda\.zip
+  | /visualization/.*\.png
 )
 '''
