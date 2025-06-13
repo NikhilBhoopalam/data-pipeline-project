@@ -154,22 +154,25 @@ jobs:
         env:
           AWS_REGION: us-east-1
         run: |
-          # Use bash but disable xtrace around the capture so trace lines don't pollute the capture.
           set -euo pipefail
-          # Temporarily turn off xtrace to avoid capturing traced commands:
+          # Turn off xtrace so wrapper prints don't pollute captures:
           set +x
-          ENDPOINT=$(terraform output -raw api_endpoint)
-          # Re-enable xtrace if you still want further logging of commands:
+          # Capture raw output (including any wrapper debug lines):
+          RAW_OUTPUT=$(terraform output -raw api_endpoint 2>&1)
+          # Extract the real HTTPS URL:
+          ENDPOINT=$(printf "%s\n" "$RAW_OUTPUT" | grep -Eo 'https://[^[:space:]]+' | head -n1)
+          # Re-enable xtrace if you want command logging:
           set -x
-          echo "Terraform output api_endpoint: $ENDPOINT"
+          echo "Captured raw terraform output:"
+          echo "$RAW_OUTPUT"
+          echo "Using extracted endpoint: $ENDPOINT"
           if [ -z "$ENDPOINT" ]; then
-            echo "ERROR: api_endpoint output is empty"; exit 1;
+            echo "ERROR: api_endpoint output is empty or not found"; exit 1;
           fi
-          # Build test URL
+          # Build test URL:
           URL="${ENDPOINT%/}/records?site_id=test-site"
           echo "Calling URL: $URL"
-          # Perform request, capture status and body
-          # We redirect output to a file so we can inspect body on failure
+          # Perform request, capture status and body:
           HTTP_STATUS=$(curl -s -o response_body.txt -w "%{http_code}" "$URL")
           echo "HTTP status: $HTTP_STATUS"
           echo "Response body:"
@@ -178,30 +181,8 @@ jobs:
             echo "Smoke test failed: expected 200 but got $HTTP_STATUS"; exit 1;
           fi
           # Optionally verify valid JSON:
-          if ! jq empty response_body.txt; then
-            echo "Response is not valid JSON"; exit 1;
-          fi
-
-          if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-          working-directory: terraform
-          env:
-            AWS_REGION: us-east-1
-          run: |
-            set -euxo pipefail
-            ENDPOINT=$(terraform output -raw api_endpoint)
-            echo "Terraform output api_endpoint: $ENDPOINT"
-            if [ -z "$ENDPOINT" ]; then
-              echo "ERROR: api_endpoint output is empty"; exit 1;
-            fi
-            URL="${ENDPOINT%/}/records?site_id=test-site"
-            echo "Calling URL: $URL"
-            HTTP_STATUS=$(curl -s -o response_body.txt -w "%{http_code}" "$URL")
-            echo "HTTP status: $HTTP_STATUS"
-            cat response_body.txt || true
-            if [ "$HTTP_STATUS" != "200" ]; then
-              echo "Smoke test failed: expected 200 but got $HTTP_STATUS"; exit 1;
-            fi
-            # Optionally verify valid JSON
+          if command -v jq >/dev/null 2>&1; then
             if ! jq empty response_body.txt; then
               echo "Response is not valid JSON"; exit 1;
             fi
+          fi
