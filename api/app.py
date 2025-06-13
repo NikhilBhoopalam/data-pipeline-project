@@ -1,6 +1,6 @@
 # api/app.py
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, Query
 from pydantic import BaseModel
 import boto3
 from boto3.dynamodb.conditions import Key, Attr
@@ -102,7 +102,8 @@ def get_anomalies(
     end: str | None = Query(None, description="End ISO timestamp"),
 ):
     """
-    Return only anomaly=True records for a given site, optionally filtered by timestamp range.
+    Return only anomaly=True records for a given site,
+    optionally filtered by timestamp range.
     Returns an empty list on errors or if no items.
     """
     if TABLE is None:
