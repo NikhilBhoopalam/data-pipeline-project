@@ -17,16 +17,23 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # or specific domains
+    allow_origins=["*"],  # or restrict to specific domains
     allow_methods=["GET", "OPTIONS"],
     allow_headers=["*"],
 )
 
+# Explicitly get region from environment (Lambda sets AWS_REGION automatically)
+aws_region = os.getenv("AWS_REGION", "us-east-1")
 
-# DynamoDB table reference
+# DynamoDB table reference with explicit region
 TABLE_NAME = os.getenv("DDB_TABLE", "EnergyData")
-TABLE = boto3.resource("dynamodb").Table(TABLE_NAME)  # type: ignore
-
+try:
+    dynamodb = boto3.resource("dynamodb", region_name=aws_region)
+    TABLE = dynamodb.Table(TABLE_NAME)  # type: ignore
+except Exception as e:
+    # If resource creation fails, log it; further calls will raise
+    print(f"[INIT ERROR] Failed to initialize DynamoDB resource: {e}", flush=True)
+    TABLE = None  # we'll check before usage
 
 class EnergyRecord(BaseModel):
     site_id: str
@@ -36,7 +43,6 @@ class EnergyRecord(BaseModel):
     net_energy_kwh: float
     anomaly: bool
 
-
 @app.get("/records", response_model=list[EnergyRecord])
 def get_records(
     site_id: str = Query(..., description="Site identifier"),
@@ -45,7 +51,13 @@ def get_records(
 ):
     """
     Fetch records for a given site, optionally filtered by [start, end] timestamp.
+    Returns an empty list on errors or if no items.
     """
+    if TABLE is None:
+        # DynamoDB resource wasn't initialized
+        print("[ERROR] TABLE is None in get_records", flush=True)
+        return []
+
     # Build KeyConditionExpression for site_id and timestamp range if provided
     expr = Key("site_id").eq(site_id)
     if start and end:
@@ -58,13 +70,12 @@ def get_records(
     try:
         resp = TABLE.query(KeyConditionExpression=expr)
     except Exception as e:
-        # Log error if desired
-        raise HTTPException(status_code=500, detail=f"DynamoDB query error: {e}")
-
+        # Log error to CloudWatch Logs, return empty list
+        print(f"[ERROR] DynamoDB query error in /records: {e}", flush=True)
+        return []
     items = resp.get("Items", [])
     results: list[EnergyRecord] = []
     for it in items:
-        # Convert Decimal to float/bool explicitly
         try:
             rec = EnergyRecord(
                 site_id=it["site_id"],
@@ -74,12 +85,12 @@ def get_records(
                 net_energy_kwh=float(it["net_energy_kwh"]),
                 anomaly=bool(it["anomaly"]),
             )
+            results.append(rec)
         except Exception as e:
-            # If conversion fails, skip or raise
-            raise HTTPException(status_code=500, detail=f"Data conversion error: {e}")
-        results.append(rec)
+            # Log conversion error and skip this item
+            print(f"[ERROR] Data conversion error in /records: {e}", flush=True)
+            continue
     return results
-
 
 @app.get("/anomalies", response_model=list[EnergyRecord])
 def get_anomalies(
@@ -88,10 +99,14 @@ def get_anomalies(
     end: str | None = Query(None, description="End ISO timestamp"),
 ):
     """
-    Return only anomaly=True records for a given site, optionally
-    filtered by timestamp range.
+    Return only anomaly=True records for a given site, optionally filtered by timestamp range.
+    Returns an empty list on errors or if no items.
     """
-    # Build KeyConditionExpression as above
+    if TABLE is None:
+        print("[ERROR] TABLE is None in get_anomalies", flush=True)
+        return []
+
+    # Build KeyConditionExpression
     expr = Key("site_id").eq(site_id)
     if start and end:
         expr = expr & Key("timestamp").between(start, end)
@@ -100,14 +115,12 @@ def get_anomalies(
     elif end:
         expr = expr & Key("timestamp").lte(end)
 
-    # FilterExpression for anomaly attribute
     filter_expr = Attr("anomaly").eq(True)
-
     try:
         resp = TABLE.query(KeyConditionExpression=expr, FilterExpression=filter_expr)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"DynamoDB query error: {e}")
-
+        print(f"[ERROR] DynamoDB query error in /anomalies: {e}", flush=True)
+        return []
     items = resp.get("Items", [])
     results: list[EnergyRecord] = []
     for it in items:
@@ -120,11 +133,11 @@ def get_anomalies(
                 net_energy_kwh=float(it["net_energy_kwh"]),
                 anomaly=bool(it["anomaly"]),
             )
+            results.append(rec)
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Data conversion error: {e}")
-        results.append(rec)
+            print(f"[ERROR] Data conversion error in /anomalies: {e}", flush=True)
+            continue
     return results
 
-
-# If deploying to AWS Lambda + API Gateway, wrap with Mangum
+# Wrap with Mangum for AWS Lambda
 handler = Mangum(app)

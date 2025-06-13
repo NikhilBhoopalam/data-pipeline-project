@@ -5,7 +5,9 @@
 *.sublime-workspace
 .idea/
 .vscode/
-.venv
+.venv/
+venv/
+.venv_pack/
 
 # Build artifacts and packaging
 api_lambda_build/
