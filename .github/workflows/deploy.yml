@@ -155,13 +155,12 @@ jobs:
           AWS_REGION: us-east-1
         run: |
           set -euo pipefail
-          # Turn off xtrace so wrapper prints don't pollute captures:
+          # Disable xtrace during capture to avoid wrapper-debug noise
           set +x
-          # Capture raw output (including any wrapper debug lines):
           RAW_OUTPUT=$(terraform output -raw api_endpoint 2>&1)
-          # Extract the real HTTPS URL:
-          ENDPOINT=$(printf "%s\n" "$RAW_OUTPUT" | grep -Eo 'https://[^[:space:]]+' | head -n1)
-          # Re-enable xtrace if you want command logging:
+          # Extract only up to the first colon or space after https://
+          ENDPOINT=$(printf "%s\n" "$RAW_OUTPUT" | grep -Eo 'https://[^: ]+' | head -n1)
+          # Re-enable xtrace if desired
           set -x
           echo "Captured raw terraform output:"
           echo "$RAW_OUTPUT"
@@ -169,10 +168,12 @@ jobs:
           if [ -z "$ENDPOINT" ]; then
             echo "ERROR: api_endpoint output is empty or not found"; exit 1;
           fi
-          # Build test URL:
+          # Optionally wait a few seconds for the API to be ready
+          sleep 5
+          # Build test URL
           URL="${ENDPOINT%/}/records?site_id=test-site"
           echo "Calling URL: $URL"
-          # Perform request, capture status and body:
+          # Perform request, capture status and body
           HTTP_STATUS=$(curl -s -o response_body.txt -w "%{http_code}" "$URL")
           echo "HTTP status: $HTTP_STATUS"
           echo "Response body:"
@@ -180,7 +181,7 @@ jobs:
           if [ "$HTTP_STATUS" != "200" ]; then
             echo "Smoke test failed: expected 200 but got $HTTP_STATUS"; exit 1;
           fi
-          # Optionally verify valid JSON:
+          # Optionally verify valid JSON (if jq is available)
           if command -v jq >/dev/null 2>&1; then
             if ! jq empty response_body.txt; then
               echo "Response is not valid JSON"; exit 1;
