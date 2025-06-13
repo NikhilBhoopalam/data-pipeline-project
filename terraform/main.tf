@@ -129,7 +129,7 @@ data "archive_file" "lambda_zip" {
 ############################
 resource "aws_lambda_function" "processor" {
   function_name = "ProcessEnergyData"
-  runtime       = "python3.9"
+  runtime       = "python3.11"
   handler       = "lambda_function.lambda_handler"
   role          = aws_iam_role.lambda_role.arn
 
