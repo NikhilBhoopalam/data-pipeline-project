@@ -45,7 +45,7 @@ resource "aws_iam_role_policy_attachment" "api_lambda_basic" {
 resource "aws_lambda_function" "api_handler" {
   function_name = "EnergyDataAPIHandler"
   runtime       = "python3.9"
-  handler       = "app.handler" # in api/app.py: handler = Mangum(app)
+  handler       = "api.app.handler" # in api/app.py: handler = Mangum(app)
   role          = aws_iam_role.api_lambda_role.arn
 
   # CI must place the zip here before terraform apply:

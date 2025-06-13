@@ -3,7 +3,8 @@ max-line-length = 88
 extend-ignore = E203, W503 
 exclude =
     .venv,
-    .venv_pack,
+    .venv*,
+    .venv_dev,
     terraform/,
     api_lambda_build/,
     *.zip,

@@ -1,21 +1,8 @@
-# Include everything your local code/tests/visualization need:
-fastapi==0.115.12
-mangum==0.19.0
-pydantic==2.11.5
-
-# Testing & mocking
-pytest==8.4.0
-moto==5.1.5
-
-# Linting / formatting
-black==25.1.0
+pytest>=7.0
+pytest-cov
+moto>=5.1
+black
 flake8
-
-# Visualization / data engineering (used locally, NOT packaged to Lambda)
-pandas==2.3.0
-numpy==2.0.2
-matplotlib==3.9.4
-plotly==6.1.2
-python-dateutil
-python-dotenv
-# etc. include whatever you need locally
+typing-extensions>=4.8.0
+httpx
+# any other dev dependencies

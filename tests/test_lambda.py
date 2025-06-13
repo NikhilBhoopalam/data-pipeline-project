@@ -1,16 +1,23 @@
 import boto3
 import json
-from moto import mock_dynamodb2, mock_s3, mock_sns
 import pytest
+from moto import mock_aws
 from lambda_function import lambda_handler
 
 
 @pytest.fixture(autouse=True)
 def setup_moto(monkeypatch):
+    # Set AWS env vars before boto3 clients are created
     monkeypatch.setenv("AWS_REGION", "us-east-1")
+    monkeypatch.setenv("AWS_DEFAULT_REGION", "us-east-1")
     monkeypatch.setenv("DDB_TABLE", "EnergyData")
-    # Do not set SNS_TOPIC here yet; set after creating the SNS topic in mock
-    with mock_dynamodb2():
+    # Dummy credentials so boto3 won’t try real AWS
+    monkeypatch.setenv("AWS_ACCESS_KEY_ID", "testing")
+    monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "testing")
+    monkeypatch.setenv("AWS_SESSION_TOKEN", "testing")
+    monkeypatch.setenv("AWS_SECURITY_TOKEN", "testing")
+
+    with mock_aws():
         # Create DynamoDB table
         db_client = boto3.client("dynamodb", region_name="us-east-1")
         db_client.create_table(
@@ -25,16 +32,16 @@ def setup_moto(monkeypatch):
             ],
             BillingMode="PAY_PER_REQUEST",
         )
-        with mock_s3():
-            s3 = boto3.client("s3", region_name="us-east-1")
-            s3.create_bucket(Bucket="test-bucket")
-            with mock_sns():
-                sns = boto3.client("sns", region_name="us-east-1")
-                resp = sns.create_topic(Name="dummy-topic")
-                topic_arn = resp["TopicArn"]
-                monkeypatch.setenv("SNS_TOPIC", topic_arn)
-                yield
-    # mocks teardown
+        # Create S3 bucket
+        s3 = boto3.client("s3", region_name="us-east-1")
+        s3.create_bucket(Bucket="test-bucket")
+        # Create SNS topic
+        sns = boto3.client("sns", region_name="us-east-1")
+        resp = sns.create_topic(Name="dummy-topic")
+        topic_arn = resp["TopicArn"]
+        monkeypatch.setenv("SNS_TOPIC", topic_arn)
+        yield
+    # Exiting mock_aws context tears down mocks
 
 
 def test_lambda_handler_puts_item():
@@ -46,7 +53,9 @@ def test_lambda_handler_puts_item():
         "energy_generated_kwh": 10.0,
         "energy_consumed_kwh": 5.0,
     }
+    # Write the record JSON to the mocked S3 bucket
     s3.put_object(Bucket="test-bucket", Key="test.json", Body=json.dumps(record))
+
     # Build S3 event
     event = {
         "Records": [
@@ -58,9 +67,11 @@ def test_lambda_handler_puts_item():
             }
         ]
     }
+    # Call the lambda handler
     resp = lambda_handler(event, None)
     assert resp["statusCode"] == 200
-    # Verify DynamoDB
+
+    # Verify DynamoDB item was put
     table = boto3.resource("dynamodb", region_name="us-east-1").Table("EnergyData")
     items = table.scan().get("Items", [])
     assert len(items) == 1

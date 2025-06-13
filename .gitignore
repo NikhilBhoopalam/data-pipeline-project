@@ -9,6 +9,9 @@
 venv/
 .venv_pack/
 
+.venv*/
+venv*/
+
 # Build artifacts and packaging
 api_lambda_build/
 terraform/api_lambda.zip

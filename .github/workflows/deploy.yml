@@ -20,7 +20,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2️⃣ Setup Python and cache pip
+      # 2️⃣ Setup Python 3.11 and cache pip
       - name: Setup Python 3.11
         uses: actions/setup-python@v4
         with:
@@ -32,23 +32,23 @@ jobs:
           path: ~/.cache/pip
           key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements*.txt') }}
 
-      - name: Install Python dev/test dependencies
+      # 3️⃣ Install runtime + dev dependencies
+      - name: Install dependencies
         run: |
           python -m venv .venv
           source .venv/bin/activate
           pip install --upgrade pip
-          # It’s better to separate runtime vs dev dependencies:
-          # e.g. requirements.txt for runtime (fastapi, mangum, pydantic), 
-          # requirements-dev.txt for lint/test (pytest, moto, black, flake8, etc.)
-          # Here install dev deps for lint/tests:
-          pip install black flake8 pytest pytest-cov moto fastapi[all] mangum boto3 pydantic
+          # Install runtime requirements
+          pip install -r requirements.txt
+          # Install dev/test requirements
+          pip install -r requirements-dev.txt
 
-      # 3️⃣ Lint: Black & Flake8 on source folders
+      # 4️⃣ Lint: Black & Flake8 on source folders
       - name: Black check
         run: |
           source .venv/bin/activate
           black --check lambda_function api data_feed tests || \
-            (echo "Black formatting issues in source folders. Run 'black lambda_function api data_feed tests' locally."; exit 1)
+            (echo "Black formatting issues. Run 'black lambda_function api data_feed tests' locally."; exit 1)
 
       - name: Flake8 lint
         run: |
@@ -56,15 +56,18 @@ jobs:
           flake8 lambda_function api || \
             (echo "Flake8 issues in source folders."; exit 1)
 
-      # 4️⃣ Run unit tests (with moto mocking DynamoDB/S3)
-      # - name: Run pytest
-      #   env:
-      #     AWS_REGION: us-east-1
-      #   run: |
-      #     source .venv/bin/activate
-      #     pytest --cov=. -q
+      # 5️⃣ Run unit tests
+      - name: Run pytest
+        env:
+          AWS_REGION: us-east-1
+          AWS_DEFAULT_REGION: us-east-1
+          AWS_ACCESS_KEY_ID: dummy
+          AWS_SECRET_ACCESS_KEY: dummy
+        run: |
+          source .venv/bin/activate
+          pytest --maxfail=1 --disable-warnings -q
 
-      # 5️⃣ Configure AWS credentials (for Terraform & smoke tests)
+      # 6️⃣ Configure AWS credentials (for Terraform & smoke tests)
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v2
         with:
@@ -72,26 +75,24 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: us-east-1
 
-      # 6️⃣ Build API Lambda package **before** Terraform plan
+      # 7️⃣ Build API Lambda package **before** Terraform plan
       - name: Build API Lambda package
         run: |
           python -m venv .venv_pack
           source .venv_pack/bin/activate
           pip install --upgrade pip
-          # Install only runtime dependencies for API Lambda (keep minimal to avoid large ZIP):
-          # If you have a separate runtime requirements file, use it. Otherwise:
-          pip install --target api_lambda_build/python fastapi mangum pydantic
-          # Copy API code
+          # Install runtime dependencies directly into the function package root:
           rm -rf api_lambda_build
-          mkdir -p api_lambda_build/python
-          # Note: if your code imports other modules, ensure they are in api/ or installed above.
+          mkdir -p api_lambda_build
+          pip install --target api_lambda_build fastapi mangum pydantic
+          # Copy API source code into the same folder
           cp -r api api_lambda_build/
-          # Zip into terraform folder so Terraform can pick it up:
+          # Create ZIP from the contents of api_lambda_build (root-level)
           cd api_lambda_build && zip -r ../terraform/api_lambda.zip .
           cd ..
-        # Make sure api_lambda_build/ and terraform/api_lambda.zip are in .gitignore
+        # Ensure api_lambda_build/ and terraform/api_lambda.zip are in .gitignore
 
-      # 7️⃣ Cache Terraform plugins
+      # 8️⃣ Cache Terraform plugins
       - name: Cache Terraform plugins
         uses: actions/cache@v3
         with:
@@ -106,18 +107,18 @@ jobs:
           plugin_cache_dir = "$HOME/.terraform.d/plugin-cache"
           EOF
 
-      # 8️⃣ Setup Terraform CLI
+      # 9️⃣ Setup Terraform CLI
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v2
         with:
           terraform_version: "1.5.0"
 
-      # 9️⃣ Terraform Init (with backend)
+      # 🔟 Terraform Init (with backend)
       - name: Terraform Init
         working-directory: terraform
         run: terraform init -reconfigure
 
-      # 🔟 Terraform Fmt Check and Validate
+      # 1️⃣1️⃣ Terraform Fmt Check and Validate
       - name: Terraform Fmt Check
         working-directory: terraform
         run: terraform fmt -check
@@ -126,7 +127,7 @@ jobs:
         working-directory: terraform
         run: terraform validate
 
-      # 1️⃣1️⃣ Terraform Plan (now sees correct api_lambda.zip)
+      # 1️⃣2️⃣ Terraform Plan
       - name: Terraform Plan
         id: tfplan
         working-directory: terraform
@@ -134,20 +135,20 @@ jobs:
           terraform plan -out=tfplan.binary \
             -var="alert_topic_arn=${{ secrets.TF_VAR_alert_TOPIC_ARN }}"
 
-      # 1️⃣2️⃣ Comment Terraform Plan on PR
+      # 1️⃣3️⃣ Comment Terraform Plan on PR
       - name: Comment Terraform Plan on PR
         if: github.event_name == 'pull_request'
         uses: marocchino/sticky-pull-request-comment@v2
         with:
           path: terraform/tfplan.binary
 
-      # 1️⃣3️⃣ Terraform Apply only on push to main
+      # 1️⃣4️⃣ Terraform Apply only on push to main
       - name: Terraform Apply
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         working-directory: terraform
         run: terraform apply -auto-approve tfplan.binary
 
-      # 1️⃣4️⃣ Smoke test API endpoint (only after Apply on main)
+      # 1️⃣5️⃣ Smoke test API endpoint (only after Apply on main)
       - name: Smoke test API endpoint (verbose)
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         working-directory: terraform
@@ -155,33 +156,23 @@ jobs:
           AWS_REGION: us-east-1
         run: |
           set -euo pipefail
-          # Disable xtrace during capture to avoid wrapper-debug noise
           set +x
           RAW_OUTPUT=$(terraform output -raw api_endpoint 2>&1)
-          # Extract only up to the first colon or space after https://
           ENDPOINT=$(printf "%s\n" "$RAW_OUTPUT" | grep -Eo 'https://[^: ]+' | head -n1)
-          # Re-enable xtrace if desired
           set -x
-          echo "Captured raw terraform output:"
-          echo "$RAW_OUTPUT"
-          echo "Using extracted endpoint: $ENDPOINT"
+          echo "Using endpoint: $ENDPOINT"
           if [ -z "$ENDPOINT" ]; then
-            echo "ERROR: api_endpoint output is empty or not found"; exit 1;
+            echo "ERROR: api_endpoint output empty"; exit 1;
           fi
-          # Optionally wait a few seconds for the API to be ready
           sleep 5
-          # Build test URL
           URL="${ENDPOINT%/}/records?site_id=test-site"
           echo "Calling URL: $URL"
-          # Perform request, capture status and body
           HTTP_STATUS=$(curl -s -o response_body.txt -w "%{http_code}" "$URL")
           echo "HTTP status: $HTTP_STATUS"
-          echo "Response body:"
-          cat response_body.txt || true
+          echo "Response body:"; cat response_body.txt || true
           if [ "$HTTP_STATUS" != "200" ]; then
             echo "Smoke test failed: expected 200 but got $HTTP_STATUS"; exit 1;
           fi
-          # Optionally verify valid JSON (if jq is available)
           if command -v jq >/dev/null 2>&1; then
             if ! jq empty response_body.txt; then
               echo "Response is not valid JSON"; exit 1;
