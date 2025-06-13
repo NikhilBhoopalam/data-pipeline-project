@@ -35,6 +35,7 @@ except Exception as e:
     print(f"[INIT ERROR] Failed to initialize DynamoDB resource: {e}", flush=True)
     TABLE = None  # we'll check before usage
 
+
 class EnergyRecord(BaseModel):
     site_id: str
     timestamp: str
@@ -42,6 +43,7 @@ class EnergyRecord(BaseModel):
     energy_consumed_kwh: float
     net_energy_kwh: float
     anomaly: bool
+
 
 @app.get("/records", response_model=list[EnergyRecord])
 def get_records(
@@ -92,6 +94,7 @@ def get_records(
             continue
     return results
 
+
 @app.get("/anomalies", response_model=list[EnergyRecord])
 def get_anomalies(
     site_id: str = Query(..., description="Site identifier"),
@@ -138,6 +141,7 @@ def get_anomalies(
             print(f"[ERROR] Data conversion error in /anomalies: {e}", flush=True)
             continue
     return results
+
 
 # Wrap with Mangum for AWS Lambda
 handler = Mangum(app)

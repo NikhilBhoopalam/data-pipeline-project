@@ -5,6 +5,7 @@ exclude = '''
 (
     /terraform/
   | \.venv/
+  | \.venv_pack/
   | api_lambda_build/
   | terraform/api_lambda\.zip
   | lambda\.zip
