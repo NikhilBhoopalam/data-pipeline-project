@@ -132,8 +132,7 @@ jobs:
         id: tfplan
         working-directory: terraform
         run: |
-          terraform plan -out=tfplan.binary \
-            -var="alert_topic_arn=${{ secrets.TF_VAR_alert_TOPIC_ARN }}"
+          terraform plan -out=tfplan.binary
 
       # 1️⃣3️⃣ Comment Terraform Plan on PR
       - name: Comment Terraform Plan on PR

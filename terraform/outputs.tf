@@ -15,3 +15,9 @@ output "lambda_function_name" {
 
 # API endpoint output lives in api.tf via its own output "api_endpoint"
 # No need to duplicate here.
+
+output "alert_topic_arn" {
+  description = "SNS topic ARN for anomaly alerts"
+  value       = aws_sns_topic.alerts.arn
+}
+

@@ -142,10 +142,19 @@ resource "aws_lambda_function" "processor" {
   environment {
     variables = {
       DDB_TABLE = aws_dynamodb_table.energy_table.name
-      SNS_TOPIC = var.alert_topic_arn
+      # SNS_TOPIC = var.alert_topic_arn
+      SNS_TOPIC = aws_sns_topic.alerts.arn
     }
   }
 }
+
+############################
+# SNS topic for anomaly alerts
+############################
+resource "aws_sns_topic" "alerts" {
+  name = "EnergyAlerts-${random_id.suffix.hex}"
+}
+
 
 ############################
 # Permission: allow S3 to invoke Processor Lambda on object creation
