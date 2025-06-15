@@ -156,3 +156,19 @@ All resources (S3, DynamoDB, Lambdas, API Gateway, SNS) are deleted; no lingerin
 | **Unit-Test Coverage > 90 %**                   | `pytest --cov` summary                                                                     |
 | **CI Badge**                                    | ![](https://github.com/NikhilBhoopalam/data-pipeline-project/actions/workflows/deploy.yml/badge.svg) |
 
+
+Example record (after Lambda processing):
+
+```bash
+{
+  "site_id": "cli",
+  "timestamp": "2025-06-14T12:00:00Z",
+  "energy_generated_kwh": 50,
+  "energy_consumed_kwh": 10,
+  "net_energy_kwh": 40,
+  "anomaly": false
+}
+
+```
+
+
