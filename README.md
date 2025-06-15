@@ -4,7 +4,7 @@
 
 ---
 
-## 🛫 Pre-Day 0 – Project Setup & Environment
+##– Project Setup & Environment
 
 | Step | Action |
 |------|--------|
@@ -15,8 +15,8 @@
 
 
 ---
-
-# Day 1 Status
+ 
+# Project Status
 
 ## Prerequisites
 - AWS account with CLI configured
@@ -35,7 +35,7 @@
 Lambda logs “pong” event successfully.
 
 ---
-#### Day 2 Verification
+## Verification
 - 17 records in DynamoDB  
 - 3 anomalies detected (`anomaly = true`)  
 - Example anomalous item:
@@ -44,11 +44,11 @@ Lambda logs “pong” event successfully.
 { "site_id": "site-3", "timestamp": "2025-06-10T20:00:00Z", "energy_generated_kwh": -10, "energy_consumed_kwh": 20, "net_energy_kwh": -30, "anomaly": true }
 ```
 
-### Day 3 – Alerts & Insights
+##  – Alerts & Insights
 1. Add Amazon SNS e-mail alert for anomalies  
 2. Generate three starter charts (energy vs consumption, anomaly count, net-energy trend)  
 
-#### Day 3 – Visualizations
+## – Visualizations
 
 | Chart | Sample |
 |-------|--------|
@@ -56,20 +56,20 @@ Lambda logs “pong” event successfully.
 | Anomalies per Site | ![](visualization/anomaly_counts.png) |
 | Net Energy Trend (daily) | ![](visualization/net_energy_trend.png) |
 
-### Day 4 – API Layer
+## – API Layer
 Goals  
 1. FastAPI service with `/records` & `/anomalies`  
 2. Interactive docs via Swagger UI  
 3. Sample queries & README update  
 
-### Day 5 – CI/CD & Polish
+## – CI/CD & Polish
 1. GitHub Actions workflow (lint + tests + terraform apply)  
 2. Build-status badge  
 3. Teardown / cost-cleanup checklist  
 
 ![ci](https://github.com/NikhilBhoopalam/data-pipeline-project/actions/workflows/deploy.yml/badge.svg)
 
-### Day 6 - End-to-End Verification, Testing & Troubleshooting
+##  End-to-End Verification, Testing & Troubleshooting
 ## 1. Dependency & Environment Fixes
 Aligned Python versions between local dev and Lambda/Terraform (e.g., Python 3.11).
 
@@ -142,7 +142,7 @@ a. deploy.yml (GitHub Actions) changes:
     - Build and package the API Lambda with its runtime dependencies in api_lambda_build or similar, ensuring fastapi, mangum, pydantic, httpx (if needed) are included.
 
 
-### 4. Terraform Changes
+## 4. Terraform Changes
 # a. Added SNS Topic for anomaly alerts in `main.tf`:
 
     ```hcl
@@ -207,7 +207,7 @@ a. deploy.yml (GitHub Actions) changes:
     You should receive this email if confirmed.
 
 
-### 6. Locally smoke test (Before CI)
+## 6. Locally smoke test (Before CI)
 1. Upload sample records to S3:
 ```bash
     # Non-anomaly
