@@ -1,10 +1,10 @@
-# ⚡ Renewable-Energy Data Pipeline
+#  Renewable-Energy Data Pipeline
 
 A **fully serverless**, **event-driven** AWS pipeline that ingests site-level telemetry, enriches it in real time, flags anomalies, and exposes the cleansed data through a FastAPI endpoint. The stack is perfect for demos, take-home assignments, or green-field prototypes where infrastructure-as-code, CI/CD, and automated testing matter.:contentReference[oaicite:0]{index=0}  
 
 ---
 
-## 📋 Table of Contents
+## Table of Contents
 1. [Prerequisites](#prerequisites)
 2. [Quick Start](#quick-start)
 3. [Project Structure](#project-structure)
@@ -19,7 +19,7 @@ A **fully serverless**, **event-driven** AWS pipeline that ingests site-level te
 
 ---
 
-## 🛫 Prerequisites  <a id="prerequisites"></a>
+##  Prerequisites  <a id="prerequisites"></a>
 
 | Tool | Why it’s needed | Version |
 |------|-----------------|---------|
