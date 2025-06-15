@@ -33,7 +33,7 @@ A **fully serverless**, **event-driven** AWS pipeline that ingests site-level te
 
 ---
 
-# 🚀 Quick Start  <a id="quick-start"></a>
+# Quick Start  <a id="quick-start"></a>
 
 ### 1 — Clone
 ```bash
@@ -68,7 +68,7 @@ Project Structure <a id="project-structure"></a>
 ├── tests/               # Pytest unit tests (Moto-powered)
 ├── visualization/       # Sample charts (PNG) + Matplotlib helper
 ├── requirements*.txt    # Runtime & dev dependency pins
-└── README.md            # You’re reading it 😉
+└── README.md            # You’re reading it 
 
 ```
 
@@ -102,7 +102,7 @@ export API_ENDPOINT=$(terraform output -raw api_endpoint)
 export ALERT_TOPIC_ARN=$(terraform output -raw alert_topic_arn)   # optional SNS
 ```
 
-# ✅ Tests <a id="tests"></a>
+# Tests <a id="tests"></a>
 
 ### Smoke-Test End-to-End
 
