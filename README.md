@@ -32,6 +32,46 @@ A **fully serverless**, **event-driven** AWS pipeline that ingests site-level te
 > Ensure your AWS credentials (`aws configure`) can create **S3, Lambda, DynamoDB, SNS, IAM, API Gateway, CloudWatch** resources.:contentReference[oaicite:1]{index=1}  
 
 ---
+---
+
+##  AWS CLI Setup  <a id="configure-aws"></a>
+
+Before you dive in, you’ll need to point your local AWS CLI (and Terraform) at your account:
+
+1. **Create an IAM user**  
+   - In the AWS Console, go to **IAM → Users → Add user**  
+   - Give it **programmatic access** and, for simplicity, the **AdministratorAccess** policy. 
+   - Download the CSV with your **Access Key ID** and **Secret Access Key**.
+
+2. **Run `aws configure`**  
+   ```bash
+   aws configure
+   # Paste in your new keys, then use:
+   #   Default region name:  us-east-1
+   #   Default output format: json
+   ```
+
+3. * Verify & common `terraform init` fix 
+    ```bash
+    aws sts get-caller-identity
+    # Should print your AWS account ID and the new user name
+
+    ```
+
+    ``` bash
+    If terraform init shows 403 Forbidden
+    Terraform can’t reach the remote-state bucket.
+
+    Bucket missing or IAM blocked Create the S3 bucket in the same region and grant your IAM user full access (s3:*) on that bucket.
+    Work locally first
+    # Comment out the entire backend "s3" block in terraform/main.tf
+    terraform init
+    terraform apply -auto-approve
+    # Later, restore the backend block and migrate state
+    terraform init -reconfigure
+    ```
+
+---
 
 # Quick Start  <a id="quick-start"></a>
 
